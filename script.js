@@ -2,6 +2,9 @@ var canvas, ctx;
 var divInfo1, divInfo2, divInfo3, divInfo4;
 var btnAddNodeName, btnCancelNodeName, txtNodeName;
 var h, w;
+var scrDx = 0;
+var scrDy = 0;
+var scrStep = 20;
 var popupNodeName;
 var mouse = { x: 0, y: 0 };
 var lastClick = { x: 0, y: 0 };
@@ -9,6 +12,8 @@ var initTime = Date.now();
 var lastUpdateTime = initTime;
 var frames = 0;
 var fps;
+var nextAutoNodeNumber = 0;
+var nodePreName = "Node";
 var nodes = {
   "President": {
     "x": 106,
@@ -99,6 +104,7 @@ var edges = {
 var nodeFontSize = 18;
 var selectedNodeName = "";
 var isDragging = false;
+var isWaitingName = false;
 var draggingNode = null;
 var boxSideMargin = 5;
 var arrowSize = 17;
@@ -139,7 +145,7 @@ function initListeners() {
   canvas.addEventListener('click', canvasClick);
   canvas.addEventListener('mousemove', canvasMouseMove);
   btnAddNodeName.onclick = addNodeName;
-  btnCancelNodeName.onclick = cancelNodeName;
+  btnCancelNodeName.onclick = HideAddNodeName;
   txtNodeName.onkeyup = validateTxtNodeName;
 }
 
@@ -153,12 +159,28 @@ function validateTxtNodeName(e) {
   txtNodeName.value = txtNodeName.value.replace(/[^a-zA-Z0-9 _\-\(\))]/g, '');
   if (e.key == "Enter") {
     addNodeName();
-  } else if (e.key == "Escape") cancelNodeName();
+  } else if (e.key == "Escape") HideAddNodeName();
 }
 
 function keyDown(e) {
-  selectedNodeName = "";
   divInfo3.innerHTML = "KeyDown: " + e.key + "<br>Code: " + e.code;
+  if (!isWaitingName) {
+    if (e.key == "ArrowUp" || e.key == "w") {
+      scrDy -= scrStep;
+    } else if (e.key == "ArrowDown" || e.key == "s") {
+      scrDy += scrStep;
+    } else if (e.key == "ArrowLeft" || e.key == "a") {
+      scrDx -= scrStep;
+    } else if (e.key == "ArrowRight" || e.key == "d") {
+      scrDx += scrStep;
+    }
+  }
+  if (e.key == "Escape") {
+    isDragging = false;
+    draggingNode = null;
+    selectedNodeName = "";
+  }
+
 }
 
 function keyUp(e) {
@@ -184,6 +206,8 @@ function mouseMove(e) {
 }
 
 function getNodeInPoint(x, y) {
+  x -= scrDx;
+  y -= scrDy;
   for (var k in nodes) {
     var n = nodes[k];
     if (x >= n.x0 && x <= (n.x0 + n.width) && y >= n.y0 && y <= (n.y0 + n.height)) {
@@ -209,7 +233,6 @@ function canvasMouseMove(e) {
   } else {
     isDragging = false;
     draggingNode = null;
-    selectedNodeName = "";
   }
 }
 
@@ -219,6 +242,7 @@ function canvasClick(e) {
 
   var nodeClicked = getNodeInPoint(lastClick.x, lastClick.y);
   if (nodeClicked != null) {
+    HideAddNodeName();
     if (selectedNodeName != "" && selectedNodeName != nodeClicked.name) {
       if (!(selectedNodeName in edges)) {
         edges[selectedNodeName] = [];
@@ -243,36 +267,59 @@ function canvasClick(e) {
       return;
     }
   }
+  ShowAddNodeName(e.clientX, e.clientY)
+}
+
+function ShowAddNodeName(x, y) {
   popupNodeName.style.position = "relative";
-  popupNodeName.style.top = e.clientY;
-  popupNodeName.style.left = e.clientX;
+  popupNodeName.style.top = y;
+  popupNodeName.style.left = x;
+  isWaitingName = true;
   popupNodeName.style.display = "block";
+  txtNodeName.value = nodePreName + nextAutoNodeNumber.toString();
+
   txtNodeName.focus();
+  txtNodeName.select();
+}
+
+function HideAddNodeName() {
+  isWaitingName = false;
+  popupNodeName.style.display = "none";
+  txtNodeName.value = "";
 }
 
 function addNodeName() {
-  var name = txtNodeName.value;
-  if (name in nodes) {
-    window.alert("Node '" + name + "' already exists");
+  var nodeName = txtNodeName.value.toString().trim();
+  if (nodeName in nodes) {
+    window.alert("Node '" + nodeName + "' already exists");
     return;
   }
-  txtNodeName.value = "";
-  popupNodeName.style.display = "none";
+  HideAddNodeName();
   ctx.font = nodeFontSize.toString() + "px monospace";
 
-  var width = ctx.measureText(name).width + boxSideMargin * 2;
+  var width = ctx.measureText(nodeName).width + boxSideMargin * 2;
   console.log(width);
   var height = nodeFontSize * 1.5;
-  var x0 = lastClick.x - width / 2;
-  var y0 = lastClick.y - height / 2;
-  nodes[name] = { x: lastClick.x, y: lastClick.y, x0: x0, y0: y0, width: width, height: height, name: name };
-  txtNodeName.value = "";
-}
+  var x0 = lastClick.x - scrDx - width / 2;
+  var y0 = lastClick.y - scrDy - height / 2;
+  nodes[nodeName] = { x: lastClick.x - scrDx, y: lastClick.y - scrDy, x0: x0, y0: y0, width: width, height: height, name: nodeName };
+  var endText = 0;
+  for (var i = nodeName.length - 1; i >= 0; i--) {
+    if (nodeName[i] < '0' || nodeName[i] > '9') {
+      endText = i + 1;
+      break;
+    }
+  }
+  nodePreName = nodeName.substr(0, endText);
+  var n = parseInt(nodeName.substr(endText));
+  if (!isNaN(n)) {
+    nextAutoNodeNumber = n + 1;
+    while (nodePreName + nextAutoNodeNumber in nodes) {
+      nextAutoNodeNumber++;
+    }
+  }
 
-function cancelNodeName() {
-  popupNodeName.style.display = "none";
-  txtNodeName.value = "";
-
+  txtNodeName.value = nodePreName + nextAutoNodeNumber;
 }
 
 function animate() {
@@ -280,16 +327,19 @@ function animate() {
   var deltaTime = Date.now() - lastUpdateTime;
   lastUpdateTime = Date.now();
   fps = Math.round(frames / ((lastUpdateTime - initTime) / 1000));
+
+  ctx.save();
+  ctx.translate(scrDx, scrDy);
   draw();
+  ctx.restore();
+
   requestAnimationFrame(animate);
 }
 
 function draw() {
+
   divInfo4.innerHTML = "FPS: " + fps + "<br>Time: " + Math.trunc((lastUpdateTime - initTime) / 1000) + " s";
   ctx.clearRect(0, 0, w, h);
-
-
-
   for (var k in edges) {
     var e = edges[k];
     var n1 = nodes[k];
